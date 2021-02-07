@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, dev]
+
+jobs:
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        cabal: ["latest"]
+        ghc:
+          - "8.6.5"
+          - "8.8.4"
+          - "8.10.3"
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: haskell/actions/setup@v1
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+   
+    - name: Update
+      run: cabal new-update
+    - name: Build
+      run: |
+        cabal new-configure --flags="dev" 
+        cabal new-build --flags="dev"
+
