@@ -1,0 +1,65 @@
+cabal-version:      3.0
+name:               asciimath
+version:            1.0
+synopsis:           AsciiMath implementation.
+description:        No really y u read this?
+homepage:           https://github.com/kozross/asciimath
+license:            Apache-2.0
+license-file:       LICENSE.md
+author:             Koz Ross
+maintainer:         koz.ross@retro-freedom.nz
+bug-reports:        https://github.com/kozross/asciimath/issues
+copyright:          (C) Koz Ross 2021
+category:           Data
+tested-with:        GHC ==9.2.1
+build-type:         Simple
+extra-source-files:
+  CHANGELOG.md
+  README.md
+
+-- Common section
+
+common lang
+  build-depends:
+    , base             ^>=4.16.0.0
+    , nonempty-vector  ^>=0.2.1.0
+    , optics-core      ^>=0.4
+    , text             ^>=2.0
+    , vector           ^>=0.12.3.1
+
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wredundant-constraints
+    -Wmissing-export-lists -Wmissing-deriving-strategies
+
+  default-language: Haskell2010
+
+common test-lang
+  import:        lang
+  build-depends:
+    , asciimath
+    , hedgehog        ^>=1.0.5
+    , pretty-show     ^>=1.10
+    , tasty           ^>=1.4.2.1
+    , tasty-hedgehog  ^>=1.1.0.0
+
+  ghc-options:   -O2 -threaded -rtsopts -with-rtsopts=-N
+
+-- Library
+
+library
+  import:          lang
+  exposed-modules: Data.Ascii.Math
+  build-depends:
+    , megaparsec          ^>=9.2.0
+    , parser-combinators  ^>=1.3.0
+
+  hs-source-dirs:  src
+
+-- Tests
+
+test-suite test
+  import:         test-lang
+  type:           exitcode-stdio-1.0
+  main-is:        Main.hs
+  hs-source-dirs: test

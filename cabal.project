@@ -1,0 +1,6 @@
+packages: ./asciimath.cabal 
+
+package asciimath
+  ghc-options: -Werror
+
+test-show-details: direct
