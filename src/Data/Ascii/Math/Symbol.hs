@@ -10,7 +10,7 @@ module Data.Ascii.Math.Symbol
     _Operation,
     _Relation,
     _Misc,
-    _Letter,
+    _Char,
     _Function,
     _Number,
     parseMathSymbol,
@@ -20,9 +20,6 @@ module Data.Ascii.Math.Symbol
     MathOperation (..),
     RelationSymbol (..),
     MiscSymbol (..),
-    MathLetter (..),
-    AsciiLetter (..),
-    AsciiCase (..),
     FunctionSymbol (..),
     AsciiNumber (..),
     AsciiDigit (..),
@@ -32,6 +29,7 @@ where
 import Control.Applicative (Alternative (empty, (<|>)))
 import Control.Monad.Combinators.NonEmpty (some)
 import Data.Ascii.Math.Parser (AsciiMathParser)
+import Data.Char (isPrint, isSpace)
 import Data.Functor (($>))
 import Data.List (sortOn)
 import Data.Monoid (Alt (Alt, getAlt))
@@ -43,7 +41,7 @@ import qualified Data.Vector as Vector
 import Data.Vector.NonEmpty (NonEmptyVector)
 import qualified Data.Vector.NonEmpty as NEVector
 import Optics.Prism (Prism', prism')
-import Text.Megaparsec (chunk, optional)
+import Text.Megaparsec (chunk, optional, satisfy, try)
 
 -- | Single symbols.
 --
@@ -55,7 +53,7 @@ data MathSymbol
   | OperationS MathOperation
   | RelationS RelationSymbol
   | MiscS MiscSymbol
-  | LetterSy MathLetter
+  | CharS Char
   | FunctionS FunctionSymbol
   | NumberS AsciiNumber
   deriving stock
@@ -90,8 +88,8 @@ _Misc :: Prism' MathSymbol MiscSymbol
 _Misc = prism' MiscS (\case MiscS m -> pure m; _ -> empty)
 
 -- | @since 1.0
-_Letter :: Prism' MathSymbol MathLetter
-_Letter = prism' LetterSy (\case LetterSy m -> pure m; _ -> empty)
+_Char :: Prism' MathSymbol Char
+_Char = prism' CharS (\case CharS c -> pure c; _ -> empty)
 
 -- | @since 1.0
 _Function :: Prism' MathSymbol FunctionSymbol
@@ -207,91 +205,6 @@ data FunctionSymbol
     MinF
   | -- | @since 1.0
     MaxF
-  deriving stock
-    ( -- | @since 1.0
-      Eq,
-      -- | @since 1.0
-      Show
-    )
-
--- | An ASCII letter, with its case.
---
--- @since 1.0
-data MathLetter = MathLetter AsciiLetter AsciiCase
-  deriving stock
-    ( -- | @since 1.0
-      Eq,
-      -- | @since 1.0
-      Show
-    )
-
--- | The case of a letter.
---
--- @since 1.0
-data AsciiCase = CaseLower | CaseUpper
-  deriving stock
-    ( -- | @since 1.0
-      Eq,
-      -- | @since 1.0
-      Show
-    )
-
--- | An ASCII letter.
---
--- @since 1.0
-data AsciiLetter
-  = -- | @since 1.0
-    LetterA
-  | -- | @since 1.0
-    LetterB
-  | -- | @since 1.0
-    LetterC
-  | -- | @since 1.0
-    LetterD
-  | -- | @since 1.0
-    LetterE
-  | -- | @since 1.0
-    LetterF
-  | -- | @since 1.0
-    LetterG
-  | -- | @since 1.0
-    LetterH
-  | -- | @since 1.0
-    LetterI
-  | -- | @since 1.0
-    LetterJ
-  | -- | @since 1.0
-    LetterK
-  | -- | @since 1.0
-    LetterL
-  | -- | @since 1.0
-    LetterM
-  | -- | @since 1.0
-    LetterN
-  | -- | @since 1.0
-    LetterO
-  | -- | @since 1.0
-    LetterP
-  | -- | @since 1.0
-    LetterQ
-  | -- | @since 1.0
-    LetterR
-  | -- | @since 1.0
-    LetterS
-  | -- | @since 1.0
-    LetterT
-  | -- | @since 1.0
-    LetterU
-  | -- | @since 1.0
-    LetterV
-  | -- | @since 1.0
-    LetterW
-  | -- | @since 1.0
-    LetterX
-  | -- | @since 1.0
-    LetterY
-  | -- | @since 1.0
-    LetterZ
   deriving stock
     ( -- | @since 1.0
       Eq,
@@ -645,7 +558,10 @@ data GreekLetter
 
 -- | @since 1.0
 parseMathSymbol :: AsciiMathParser MathSymbol
-parseMathSymbol = (getAlt . Vector.foldMap' go $ parseLut) <|> parseNumber
+parseMathSymbol =
+  (getAlt . Vector.foldMap' go $ parseLut)
+    <|> try parseNumber
+    <|> CharS <$> satisfy isSuitableSymbol
   where
     go :: (Text, MathSymbol) -> Alt AsciiMathParser MathSymbol
     go (t, res) = Alt (chunk t $> res)
@@ -666,6 +582,18 @@ parseMathSymbol = (getAlt . Vector.foldMap' go $ parseLut) <|> parseNumber
         <|> (chunk "7" $> DSeven)
         <|> (chunk "8" $> DEight)
         <|> (chunk "9" $> DNine)
+    isSuitableSymbol :: Char -> Bool
+    isSuitableSymbol c
+      | not . isPrint $ c = False
+      | isSpace c = False
+      | c == '*' = False
+      | c == '+' = False
+      | c == '-' = False
+      | c == '@' = False
+      | c == '=' = False
+      | c == '>' = False
+      | c == '<' = False
+      | otherwise = True
 
 -- Helpers
 
@@ -896,59 +824,6 @@ parseLut =
       (",", MiscS MiscComma),
       (";", MiscS MiscSemicolon),
       (":", MiscS MiscColon),
-      -- ASCII letters
-      ("a", LetterSy (MathLetter LetterA CaseLower)),
-      ("A", LetterSy (MathLetter LetterA CaseUpper)),
-      ("b", LetterSy (MathLetter LetterB CaseLower)),
-      ("B", LetterSy (MathLetter LetterB CaseUpper)),
-      ("c", LetterSy (MathLetter LetterC CaseLower)),
-      ("C", LetterSy (MathLetter LetterC CaseUpper)),
-      ("d", LetterSy (MathLetter LetterD CaseLower)),
-      ("D", LetterSy (MathLetter LetterD CaseUpper)),
-      ("e", LetterSy (MathLetter LetterE CaseLower)),
-      ("E", LetterSy (MathLetter LetterE CaseUpper)),
-      ("f", LetterSy (MathLetter LetterF CaseLower)),
-      ("F", LetterSy (MathLetter LetterF CaseUpper)),
-      ("g", LetterSy (MathLetter LetterG CaseLower)),
-      ("G", LetterSy (MathLetter LetterG CaseUpper)),
-      ("h", LetterSy (MathLetter LetterH CaseLower)),
-      ("H", LetterSy (MathLetter LetterH CaseUpper)),
-      ("i", LetterSy (MathLetter LetterI CaseLower)),
-      ("I", LetterSy (MathLetter LetterI CaseUpper)),
-      ("j", LetterSy (MathLetter LetterJ CaseLower)),
-      ("J", LetterSy (MathLetter LetterJ CaseUpper)),
-      ("k", LetterSy (MathLetter LetterK CaseLower)),
-      ("K", LetterSy (MathLetter LetterK CaseUpper)),
-      ("l", LetterSy (MathLetter LetterL CaseLower)),
-      ("L", LetterSy (MathLetter LetterL CaseUpper)),
-      ("m", LetterSy (MathLetter LetterM CaseLower)),
-      ("M", LetterSy (MathLetter LetterM CaseUpper)),
-      ("n", LetterSy (MathLetter LetterN CaseLower)),
-      ("N", LetterSy (MathLetter LetterN CaseUpper)),
-      ("o", LetterSy (MathLetter LetterO CaseLower)),
-      ("O", LetterSy (MathLetter LetterO CaseUpper)),
-      ("p", LetterSy (MathLetter LetterP CaseLower)),
-      ("P", LetterSy (MathLetter LetterP CaseUpper)),
-      ("q", LetterSy (MathLetter LetterQ CaseLower)),
-      ("Q", LetterSy (MathLetter LetterQ CaseUpper)),
-      ("r", LetterSy (MathLetter LetterR CaseLower)),
-      ("R", LetterSy (MathLetter LetterR CaseUpper)),
-      ("s", LetterSy (MathLetter LetterS CaseLower)),
-      ("S", LetterSy (MathLetter LetterS CaseUpper)),
-      ("t", LetterSy (MathLetter LetterT CaseLower)),
-      ("T", LetterSy (MathLetter LetterT CaseUpper)),
-      ("u", LetterSy (MathLetter LetterU CaseLower)),
-      ("U", LetterSy (MathLetter LetterU CaseUpper)),
-      ("v", LetterSy (MathLetter LetterV CaseLower)),
-      ("V", LetterSy (MathLetter LetterV CaseUpper)),
-      ("w", LetterSy (MathLetter LetterW CaseLower)),
-      ("W", LetterSy (MathLetter LetterW CaseUpper)),
-      ("x", LetterSy (MathLetter LetterX CaseLower)),
-      ("X", LetterSy (MathLetter LetterX CaseUpper)),
-      ("y", LetterSy (MathLetter LetterY CaseLower)),
-      ("Y", LetterSy (MathLetter LetterY CaseUpper)),
-      ("z", LetterSy (MathLetter LetterZ CaseLower)),
-      ("Z", LetterSy (MathLetter LetterZ CaseUpper)),
       -- Functions
       ("sin", FunctionS SinF),
       ("cos", FunctionS CosF),

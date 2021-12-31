@@ -1,20 +1,19 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main (main) where
 
 import Data.Ascii.Math.Parser (parseMathMaybe)
 import Data.Ascii.Math.Symbol
-  ( AsciiCase (CaseLower, CaseUpper),
-    AsciiDigit,
-    MathLetter (MathLetter),
+  ( AsciiDigit,
     MathSymbol,
     parseMathSymbol,
     _Arrow,
+    _Char,
     _Function,
     _Greek,
-    _Letter,
     _Logic,
     _Misc,
     _Number,
@@ -22,8 +21,16 @@ import Data.Ascii.Math.Symbol
     _Relation,
   )
 import qualified Data.Ascii.Math.Symbol as Symbol
+import Data.Ascii.Math.TextLit
+  ( MathTextLit,
+    parseMathTextLit,
+    textLitType,
+  )
+import qualified Data.Ascii.Math.TextLit as Lit
+import Data.Char (isPrint, isSpace)
 import Data.Maybe (isJust)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 import Data.Vector.NonEmpty (NonEmptyVector)
@@ -40,6 +47,7 @@ import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Optics.AffineFold (preview)
+import Optics.Prism (Prism')
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.Hedgehog (testProperty)
 import Text.Show.Pretty (ppShow)
@@ -55,10 +63,24 @@ main =
         cover 10 "Relational symbol" (isJust . preview _Relation $ expected)
         cover 10 "Operation" (isJust . preview _Operation $ expected)
         cover 10 "Miscellaneous" (isJust . preview _Misc $ expected)
-        cover 10 "Letter" (isJust . preview _Letter $ expected)
+        cover 10 "Letter" (isJust . preview _Char $ expected)
         cover 10 "Function symbol" (isJust . preview _Function $ expected)
         cover 10 "Number" (isJust . preview _Number $ expected)
         case parseMathMaybe parseMathSymbol input of
+          Nothing -> failure
+          Just y -> y === expected,
+      testProperty "Text literals parse" . withTests 4000 . property $ do
+        (input, expected) <- forAllWith ppShow genTextLit
+        let typ = textLitType expected
+        cover 11 "text()-style" (typ == Lit.TextTL)
+        cover 11 "\"\"-style" (typ == Lit.QuoteTL)
+        cover 11 "mathbf" (typ == Lit.MathbfTL)
+        cover 11 "mathbb" (typ == Lit.MathbbTL)
+        cover 11 "mathcal" (typ == Lit.MathcalTL)
+        cover 11 "mathtt" (typ == Lit.MathttTL)
+        cover 11 "mathfrak" (typ == Lit.MathfrakTL)
+        cover 11 "mathsf" (typ == Lit.MathsfTL)
+        case parseMathMaybe parseMathTextLit input of
           Nothing -> failure
           Just y -> y === expected
     ]
@@ -67,6 +89,36 @@ main =
     pickFromLut = Gen.choice . Vector.toList $ testLut
 
 -- Helpers
+
+genTextLit :: Gen (Text, MathTextLit)
+genTextLit = Gen.just (Gen.element prismLut >>= go)
+  where
+    go ::
+      (Maybe Text, Text, Text, Prism' Text MathTextLit) ->
+      Gen (Maybe (Text, MathTextLit))
+    go (mPref, l, r, p) = do
+      prefix <- case mPref of
+        Nothing -> pure ""
+        Just pref -> (pref <>) <$> Gen.text (Range.linear 0 100) (pure ' ')
+      t <- Gen.text (Range.linear 0 100) Gen.unicode
+      pure $ fmap (prefix <> l <> t <> r,) (preview p t)
+    prismLut :: [(Maybe Text, Text, Text, Prism' Text MathTextLit)]
+    prismLut =
+      [ (Just "text", "(", ")", Lit._TextTL),
+        (Nothing, "\"", "\"", Lit._QuoteTL),
+        (Just "mathbf", "\"", "\"", Lit._MathbfTL),
+        (Just "bb", "\"", "\"", Lit._MathbfTL),
+        (Just "mathbb", "\"", "\"", Lit._MathbbTL),
+        (Just "bbb", "\"", "\"", Lit._MathbbTL),
+        (Just "mathcal", "\"", "\"", Lit._MathcalTL),
+        (Just "cc", "\"", "\"", Lit._MathcalTL),
+        (Just "mathtt", "\"", "\"", Lit._MathttTL),
+        (Just "tt", "\"", "\"", Lit._MathttTL),
+        (Just "mathfrak", "\"", "\"", Lit._MathfrakTL),
+        (Just "fr", "\"", "\"", Lit._MathfrakTL),
+        (Just "mathsf", "\"", "\"", Lit._MathsfTL),
+        (Just "sf", "\"", "\"", Lit._MathsfTL)
+      ]
 
 testLut :: Vector (Gen (Text, MathSymbol))
 testLut =
@@ -77,13 +129,18 @@ testLut =
       go relationLut,
       go operationLut,
       go miscLut,
-      go letterLut,
+      genChar,
       go functionLut,
       genNumber
     ]
   where
     go :: Vector (Text, MathSymbol) -> Gen (Text, MathSymbol)
     go = Gen.element . Vector.toList
+
+genChar :: Gen (Text, MathSymbol)
+genChar = do
+  c <- Gen.filter (\c -> isPrint c && (not . isSpace) c) Gen.unicode
+  pure (Text.singleton c, Symbol.CharS c)
 
 genNumber :: Gen (Text, MathSymbol)
 genNumber = do
@@ -369,63 +426,6 @@ miscLut =
       (",", Symbol.MiscComma),
       (";", Symbol.MiscSemicolon),
       (":", Symbol.MiscColon)
-    ]
-
-letterLut :: Vector (Text, MathSymbol)
-letterLut =
-  Vector.fromList . fmap (fmap Symbol.LetterSy) $
-    [ ("a", MathLetter Symbol.LetterA CaseLower),
-      ("A", MathLetter Symbol.LetterA CaseUpper),
-      ("b", MathLetter Symbol.LetterB CaseLower),
-      ("B", MathLetter Symbol.LetterB CaseUpper),
-      ("c", MathLetter Symbol.LetterC CaseLower),
-      ("C", MathLetter Symbol.LetterC CaseUpper),
-      ("d", MathLetter Symbol.LetterD CaseLower),
-      ("D", MathLetter Symbol.LetterD CaseUpper),
-      ("e", MathLetter Symbol.LetterE CaseLower),
-      ("E", MathLetter Symbol.LetterE CaseUpper),
-      ("f", MathLetter Symbol.LetterF CaseLower),
-      ("F", MathLetter Symbol.LetterF CaseUpper),
-      ("g", MathLetter Symbol.LetterG CaseLower),
-      ("G", MathLetter Symbol.LetterG CaseUpper),
-      ("h", MathLetter Symbol.LetterH CaseLower),
-      ("H", MathLetter Symbol.LetterH CaseUpper),
-      ("i", MathLetter Symbol.LetterI CaseLower),
-      ("I", MathLetter Symbol.LetterI CaseUpper),
-      ("j", MathLetter Symbol.LetterJ CaseLower),
-      ("J", MathLetter Symbol.LetterJ CaseUpper),
-      ("k", MathLetter Symbol.LetterK CaseLower),
-      ("K", MathLetter Symbol.LetterK CaseUpper),
-      ("l", MathLetter Symbol.LetterL CaseLower),
-      ("L", MathLetter Symbol.LetterL CaseUpper),
-      ("m", MathLetter Symbol.LetterM CaseLower),
-      ("M", MathLetter Symbol.LetterM CaseUpper),
-      ("n", MathLetter Symbol.LetterN CaseLower),
-      ("N", MathLetter Symbol.LetterN CaseUpper),
-      ("o", MathLetter Symbol.LetterO CaseLower),
-      ("O", MathLetter Symbol.LetterO CaseUpper),
-      ("p", MathLetter Symbol.LetterP CaseLower),
-      ("P", MathLetter Symbol.LetterP CaseUpper),
-      ("q", MathLetter Symbol.LetterQ CaseLower),
-      ("Q", MathLetter Symbol.LetterQ CaseUpper),
-      ("r", MathLetter Symbol.LetterR CaseLower),
-      ("R", MathLetter Symbol.LetterR CaseUpper),
-      ("s", MathLetter Symbol.LetterS CaseLower),
-      ("S", MathLetter Symbol.LetterS CaseUpper),
-      ("t", MathLetter Symbol.LetterT CaseLower),
-      ("T", MathLetter Symbol.LetterT CaseUpper),
-      ("u", MathLetter Symbol.LetterU CaseLower),
-      ("U", MathLetter Symbol.LetterU CaseUpper),
-      ("v", MathLetter Symbol.LetterV CaseLower),
-      ("V", MathLetter Symbol.LetterV CaseUpper),
-      ("w", MathLetter Symbol.LetterW CaseLower),
-      ("W", MathLetter Symbol.LetterW CaseUpper),
-      ("x", MathLetter Symbol.LetterX CaseLower),
-      ("X", MathLetter Symbol.LetterX CaseUpper),
-      ("y", MathLetter Symbol.LetterY CaseLower),
-      ("Y", MathLetter Symbol.LetterY CaseUpper),
-      ("z", MathLetter Symbol.LetterZ CaseLower),
-      ("Z", MathLetter Symbol.LetterZ CaseUpper)
     ]
 
 functionLut :: Vector (Text, MathSymbol)
