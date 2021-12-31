@@ -1,15 +1,9 @@
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
-module Data.Ascii.Math
-  ( AsciiMathParser,
-    parseMathMaybe,
-    MathSymbol (..),
+module Data.Ascii.Math.Symbol
+  ( MathSymbol (..),
     _Greek,
     _Arrow,
     _Logic,
@@ -36,15 +30,12 @@ module Data.Ascii.Math
 where
 
 import Control.Applicative (Alternative (empty, (<|>)))
-import Control.Monad (MonadPlus)
 import Control.Monad.Combinators.NonEmpty (some)
+import Data.Ascii.Math.Parser (AsciiMathParser)
 import Data.Functor (($>))
-import Data.Functor.Identity (Identity)
-import Data.Kind (Type)
 import Data.List (sortOn)
 import Data.Monoid (Alt (Alt, getAlt))
 import Data.Ord (Down (Down))
-import Data.String (IsString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Vector (Vector)
@@ -52,57 +43,7 @@ import qualified Data.Vector as Vector
 import Data.Vector.NonEmpty (NonEmptyVector)
 import qualified Data.Vector.NonEmpty as NEVector
 import Optics.Prism (Prism', prism')
-import Text.Megaparsec
-  ( MonadParsec,
-    ParsecT,
-    chunk,
-    optional,
-    parseMaybe,
-  )
-
--- | Errors.
---
--- @since 1.0
-data AsciiMathError = AsciiMathError
-  deriving stock
-    ( -- | @since 1.0
-      Eq,
-      -- | @since 1.0
-      Ord
-    )
-
--- | @since 1.0
-newtype AsciiMathParser (a :: Type)
-  = AsciiMathParser (ParsecT AsciiMathError Text Identity a)
-  deriving
-    ( -- | @since 1.0
-      Functor,
-      -- | @since 1.0
-      Applicative,
-      -- | @since 1.0
-      Alternative,
-      -- | @since 1.0
-      Monad,
-      -- @since 1.0
-      MonadPlus,
-      -- | @since 1.0
-      MonadParsec AsciiMathError Text
-    )
-    via (ParsecT AsciiMathError Text Identity)
-
--- | @since 1.0
-deriving via
-  (ParsecT AsciiMathError Text Identity Text)
-  instance
-    IsString (AsciiMathParser Text)
-
--- | @since 1.0
-parseMathMaybe ::
-  forall (a :: Type).
-  AsciiMathParser a ->
-  Text ->
-  Maybe a
-parseMathMaybe (AsciiMathParser comp) = parseMaybe comp
+import Text.Megaparsec (chunk, optional)
 
 -- | Single symbols.
 --
