@@ -1,7 +1,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 module Main (main) where
 
@@ -21,12 +20,6 @@ import Data.Ascii.Math.Symbol
     _Relation,
   )
 import qualified Data.Ascii.Math.Symbol as Symbol
-import Data.Ascii.Math.TextLit
-  ( MathTextLit,
-    parseMathTextLit,
-    textLitType,
-  )
-import qualified Data.Ascii.Math.TextLit as Lit
 import Data.Char (isPrint, isSpace)
 import Data.Maybe (isJust)
 import Data.Text (Text)
@@ -47,7 +40,6 @@ import Hedgehog
 import qualified Hedgehog.Gen as Gen
 import qualified Hedgehog.Range as Range
 import Optics.AffineFold (preview)
-import Optics.Prism (Prism')
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.Hedgehog (testProperty)
 import Text.Show.Pretty (ppShow)
@@ -68,20 +60,6 @@ main =
         cover 10 "Number" (isJust . preview _Number $ expected)
         case parseMathMaybe parseMathSymbol input of
           Nothing -> failure
-          Just y -> y === expected,
-      testProperty "Text literals parse" . withTests 4000 . property $ do
-        (input, expected) <- forAllWith ppShow genTextLit
-        let typ = textLitType expected
-        cover 11 "text()-style" (typ == Lit.TextTL)
-        cover 11 "\"\"-style" (typ == Lit.QuoteTL)
-        cover 11 "mathbf" (typ == Lit.MathbfTL)
-        cover 11 "mathbb" (typ == Lit.MathbbTL)
-        cover 11 "mathcal" (typ == Lit.MathcalTL)
-        cover 11 "mathtt" (typ == Lit.MathttTL)
-        cover 11 "mathfrak" (typ == Lit.MathfrakTL)
-        cover 11 "mathsf" (typ == Lit.MathsfTL)
-        case parseMathMaybe parseMathTextLit input of
-          Nothing -> failure
           Just y -> y === expected
     ]
   where
@@ -89,36 +67,6 @@ main =
     pickFromLut = Gen.choice . Vector.toList $ testLut
 
 -- Helpers
-
-genTextLit :: Gen (Text, MathTextLit)
-genTextLit = Gen.just (Gen.element prismLut >>= go)
-  where
-    go ::
-      (Maybe Text, Text, Text, Prism' Text MathTextLit) ->
-      Gen (Maybe (Text, MathTextLit))
-    go (mPref, l, r, p) = do
-      prefix <- case mPref of
-        Nothing -> pure ""
-        Just pref -> (pref <>) <$> Gen.text (Range.linear 0 100) (pure ' ')
-      t <- Gen.text (Range.linear 0 100) Gen.unicode
-      pure $ fmap (prefix <> l <> t <> r,) (preview p t)
-    prismLut :: [(Maybe Text, Text, Text, Prism' Text MathTextLit)]
-    prismLut =
-      [ (Just "text", "(", ")", Lit._TextTL),
-        (Nothing, "\"", "\"", Lit._QuoteTL),
-        (Just "mathbf", "\"", "\"", Lit._MathbfTL),
-        (Just "bb", "\"", "\"", Lit._MathbfTL),
-        (Just "mathbb", "\"", "\"", Lit._MathbbTL),
-        (Just "bbb", "\"", "\"", Lit._MathbbTL),
-        (Just "mathcal", "\"", "\"", Lit._MathcalTL),
-        (Just "cc", "\"", "\"", Lit._MathcalTL),
-        (Just "mathtt", "\"", "\"", Lit._MathttTL),
-        (Just "tt", "\"", "\"", Lit._MathttTL),
-        (Just "mathfrak", "\"", "\"", Lit._MathfrakTL),
-        (Just "fr", "\"", "\"", Lit._MathfrakTL),
-        (Just "mathsf", "\"", "\"", Lit._MathsfTL),
-        (Just "sf", "\"", "\"", Lit._MathsfTL)
-      ]
 
 testLut :: Vector (Gen (Text, MathSymbol))
 testLut =
@@ -139,8 +87,17 @@ testLut =
 
 genChar :: Gen (Text, MathSymbol)
 genChar = do
-  c <- Gen.filter (\c -> isPrint c && (not . isSpace) c) Gen.unicode
+  c <- Gen.filter go Gen.unicode
   pure (Text.singleton c, Symbol.CharS c)
+  where
+    go :: Char -> Bool
+    go c
+      | not . isPrint $ c = False
+      | isSpace c = False
+      | elem c forbiddenSymbols = False
+      | otherwise = True
+    forbiddenSymbols :: [Char]
+    forbiddenSymbols = "*+-@=><,.0123456789:;"
 
 genNumber :: Gen (Text, MathSymbol)
 genNumber = do

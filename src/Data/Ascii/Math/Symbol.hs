@@ -586,14 +586,10 @@ parseMathSymbol =
     isSuitableSymbol c
       | not . isPrint $ c = False
       | isSpace c = False
-      | c == '*' = False
-      | c == '+' = False
-      | c == '-' = False
-      | c == '@' = False
-      | c == '=' = False
-      | c == '>' = False
-      | c == '<' = False
+      | c `elem` forbiddenSymbols = False
       | otherwise = True
+    forbiddenSymbols :: [Char]
+    forbiddenSymbols = "*+-@=><,.0123456789:;"
 
 -- Helpers
 
